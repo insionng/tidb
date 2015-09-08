@@ -83,12 +83,12 @@ func NewUnionStore(snapshot Snapshot) (UnionStore, error) {
 }
 
 // Get implements the Store Get interface.
-func (us *UnionStore) Get(key []byte) (value []byte, err error) {
+func (us *UnionStore) Get(key []byte, ver Version) (value []byte, err error) {
 	// Get from update records frist
 	value, err = us.Dirty.Get(key)
 	if IsErrNotFound(err) {
 		// Try get from snapshot
-		return us.Snapshot.Get(key, LatestVersion)
+		return us.Snapshot.Get(key, ver)
 	}
 
 	if err != nil {

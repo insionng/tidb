@@ -22,6 +22,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/store/localstore/engine"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
@@ -72,7 +73,7 @@ func (txn *dbTxn) Inc(k []byte, step int64) (int64, error) {
 	if err := txn.markOrigin(k); err != nil {
 		return 0, err
 	}
-	val, err := txn.UnionStore.Get(k)
+	val, err := txn.UnionStore.Get(k, kv.LatestVersion)
 	if kv.IsErrNotFound(err) {
 		err = txn.UnionStore.Set(k, []byte(strconv.FormatInt(step, 10)))
 		if err != nil {
@@ -107,7 +108,7 @@ func (txn *dbTxn) String() string {
 func (txn *dbTxn) Get(k []byte, ver kv.Version) ([]byte, error) {
 	log.Debugf("get key:%s, txn:%d", k, txn.ver)
 	k = kv.EncodeKey(k)
-	val, err := txn.UnionStore.Get(k)
+	val, err := txn.UnionStore.Get(k, ver)
 	if kv.IsErrNotFound(err) {
 		return nil, kv.ErrNotExist
 	}
@@ -173,6 +174,18 @@ func (txn *dbTxn) each(f func(iterator.Iterator) error) error {
 	return nil
 }
 
+func (txn *dbTxn) updateMeta(b engine.Batch, key []byte, ver kv.Version, isDeleted bool) error {
+	metaKey := getMetaKey(key)
+	// update lastest version to meta
+	// values -> encode([version, is_delete])
+	meta, err := kv.EncodeValue(ver, isDeleted)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	b.Put([]byte(metaKey), meta)
+	return nil
+}
+
 func (txn *dbTxn) doCommit() (kv.Version, error) {
 	b := txn.store.newBatch()
 	keysLocked := make([]string, 0, len(txn.snapshotVals))
@@ -192,10 +205,15 @@ func (txn *dbTxn) doCommit() (kv.Version, error) {
 
 	// Check dirty store
 	err := txn.each(func(iter iterator.Iterator) error {
+		err := txn.updateMeta(b, iter.Key(), txn.ver, len(iter.Value()) == 0)
+		if err != nil {
+			return err
+		}
+		dataKey := getDataKey(iter.Key(), txn.ver)
 		if len(iter.Value()) == 0 { // Deleted marker
-			b.Delete(iter.Key())
+			b.Put(dataKey, nil)
 		} else {
-			b.Put(iter.Key(), iter.Value())
+			b.Put(dataKey, iter.Value())
 		}
 		return nil
 	})

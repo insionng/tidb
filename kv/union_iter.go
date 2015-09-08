@@ -22,8 +22,8 @@ import (
 
 // UnionIter is the iterator on an UnionStore.
 type UnionIter struct {
-	dirtyIt       iterator.Iterator
-	snapshotIt    Iterator
+	dirtyIt       iterator.Iterator // leveldb iterator
+	snapshotIt    Iterator          // snapshot iterator
 	curIsDirty    bool
 	dirtyValid    bool
 	snapshotValid bool

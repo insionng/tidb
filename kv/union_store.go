@@ -88,7 +88,7 @@ func (us *UnionStore) Get(key []byte) (value []byte, err error) {
 	value, err = us.Dirty.Get(key)
 	if IsErrNotFound(err) {
 		// Try get from snapshot
-		return us.Snapshot.Get(key)
+		return us.Snapshot.Get(key, LatestVersion)
 	}
 
 	if err != nil {
@@ -124,7 +124,7 @@ func (s *levelDBSnapshot) NewIterator(param interface{}) Iterator {
 
 // Seek implements the Snapshot Seek interface.
 func (us *UnionStore) Seek(key []byte, txn Transaction) (Iterator, error) {
-	snapshotIt := us.Snapshot.NewIterator(key)
+	snapshotIt := us.Snapshot.NewIterator(key, LatestVersion)
 	dirtyIt := us.Dirty.NewIterator(&util.Range{Start: key})
 	it := newUnionIter(dirtyIt, snapshotIt)
 	return it, nil
@@ -140,7 +140,7 @@ func (us *UnionStore) Delete(k []byte) error {
 		}
 
 		// miss in dirty
-		val, err = us.Snapshot.Get(k)
+		val, err = us.Snapshot.Get(k, LatestVersion)
 		if err != nil {
 			if IsErrNotFound(err) {
 				return ErrNotExist

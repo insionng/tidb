@@ -528,7 +528,7 @@ func (d *ddl) buildIndex(ctx context.Context, t table.Table, idxInfo *model.Inde
 	if err != nil {
 		return errors.Trace(err)
 	}
-	it, err := txn.Seek([]byte(firstKey), nil)
+	it, err := txn.Seek([]byte(firstKey), kv.LatestVersion, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -551,7 +551,7 @@ func (d *ddl) buildIndex(ctx context.Context, t table.Table, idxInfo *model.Inde
 			)
 			col := cols[v.Offset]
 			k := t.RecordKey(h, col)
-			data, err = txn.Get([]byte(k))
+			data, err = txn.Get([]byte(k), kv.LatestVersion)
 			if err != nil {
 				return errors.Trace(err)
 			}

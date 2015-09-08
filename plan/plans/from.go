@@ -63,7 +63,7 @@ func (r *TableNilPlan) Do(ctx context.Context, f plan.RowIterFunc) error {
 	if err != nil {
 		return err
 	}
-	it, err := txn.Seek([]byte(h), nil)
+	it, err := txn.Seek([]byte(h), kv.LatestVersion, nil)
 	if err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (r *TableDefaultPlan) Do(ctx context.Context, f plan.RowIterFunc) error {
 	head := t.FirstKey()
 	prefix := t.KeyPrefix()
 
-	it, err := txn.Seek([]byte(head), nil)
+	it, err := txn.Seek([]byte(head), kv.LatestVersion, nil)
 	if err != nil {
 		return err
 	}

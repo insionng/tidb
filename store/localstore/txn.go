@@ -39,7 +39,7 @@ type dbTxn struct {
 	kv.UnionStore
 	store        *dbStore // for commit
 	startTs      time.Time
-	tID          int64
+	ver          kv.Version
 	opCnt        int64
 	valid        bool
 	snapshotVals map[string][]byte // origin version in snapshot
@@ -53,7 +53,7 @@ func (txn *dbTxn) markOrigin(k []byte) error {
 		return nil
 	}
 
-	val, err := txn.Snapshot.Get(k)
+	val, err := txn.Snapshot.Get(k, kv.LatestVersion)
 	if err != nil && !kv.IsErrNotFound(err) {
 		return err
 	}
@@ -66,7 +66,7 @@ func (txn *dbTxn) markOrigin(k []byte) error {
 // Implement transaction interface
 
 func (txn *dbTxn) Inc(k []byte, step int64) (int64, error) {
-	log.Debugf("Inc %s, step %d txn:%d", k, step, txn.tID)
+	log.Debugf("Inc %s, step %d txn:%v", k, step, txn.ver)
 	k = kv.EncodeKey(k)
 
 	if err := txn.markOrigin(k); err != nil {
@@ -101,11 +101,11 @@ func (txn *dbTxn) Inc(k []byte, step int64) (int64, error) {
 }
 
 func (txn *dbTxn) String() string {
-	return fmt.Sprintf("%d", txn.tID)
+	return fmt.Sprintf("%v", txn.ver)
 }
 
-func (txn *dbTxn) Get(k []byte) ([]byte, error) {
-	log.Debugf("get key:%s, txn:%d", k, txn.tID)
+func (txn *dbTxn) Get(k []byte, ver kv.Version) ([]byte, error) {
+	log.Debugf("get key:%s, txn:%d", k, txn.ver)
 	k = kv.EncodeKey(k)
 	val, err := txn.UnionStore.Get(k)
 	if kv.IsErrNotFound(err) {
@@ -129,13 +129,13 @@ func (txn *dbTxn) Set(k []byte, data []byte) error {
 		return ErrCannotSetNilValue
 	}
 
-	log.Debugf("set key:%s, txn:%d", k, txn.tID)
+	log.Debugf("set key:%s, txn:%d", k, txn.ver)
 	k = kv.EncodeKey(k)
 	return txn.UnionStore.Set(k, data)
 }
 
-func (txn *dbTxn) Seek(k []byte, fnKeyCmp func([]byte) bool) (kv.Iterator, error) {
-	log.Debugf("seek %s txn:%d", k, txn.tID)
+func (txn *dbTxn) Seek(k []byte, ver kv.Version, fnKeyCmp func([]byte) bool) (kv.Iterator, error) {
+	log.Debugf("seek %s txn:%d", k, txn.ver)
 	k = kv.EncodeKey(k)
 
 	iter, err := txn.UnionStore.Seek(k, txn)
@@ -157,7 +157,7 @@ func (txn *dbTxn) Seek(k []byte, fnKeyCmp func([]byte) bool) (kv.Iterator, error
 }
 
 func (txn *dbTxn) Delete(k []byte) error {
-	log.Debugf("delete %s txn:%d", k, txn.tID)
+	log.Debugf("delete %s txn:%d", k, txn.ver)
 	k = kv.EncodeKey(k)
 	return txn.UnionStore.Delete(k)
 }
@@ -173,7 +173,7 @@ func (txn *dbTxn) each(f func(iterator.Iterator) error) error {
 	return nil
 }
 
-func (txn *dbTxn) doCommit() error {
+func (txn *dbTxn) doCommit() (kv.Version, error) {
 	b := txn.store.newBatch()
 	keysLocked := make([]string, 0, len(txn.snapshotVals))
 	defer func() {
@@ -183,9 +183,9 @@ func (txn *dbTxn) doCommit() error {
 	}()
 	// Check locked keys
 	for k, v := range txn.snapshotVals {
-		err := txn.store.tryConditionLockKey(txn.tID, k, v)
+		err := txn.store.tryConditionLockKey(txn.ver, k, v)
 		if err != nil {
-			return errors.Trace(err)
+			return 0, errors.Trace(err)
 		}
 		keysLocked = append(keysLocked, k)
 	}
@@ -200,17 +200,17 @@ func (txn *dbTxn) doCommit() error {
 		return nil
 	})
 	if err != nil {
-		return errors.Trace(err)
+		return 0, errors.Trace(err)
 	}
-	return txn.store.writeBatch(b)
+	return 0, txn.store.writeBatch(b)
 
 }
 
-func (txn *dbTxn) Commit() error {
+func (txn *dbTxn) Commit() (kv.Version, error) {
 	if !txn.valid {
-		return ErrInvalidTxn
+		return 0, ErrInvalidTxn
 	}
-	log.Infof("commit txn %d", txn.tID)
+	log.Infof("commit txn %v", txn.ver)
 	defer func() {
 		txn.close()
 	}()
@@ -229,7 +229,7 @@ func (txn *dbTxn) Rollback() error {
 	if !txn.valid {
 		return ErrInvalidTxn
 	}
-	log.Warnf("Rollback txn %d", txn.tID)
+	log.Warnf("Rollback txn %d", txn.ver)
 	return txn.close()
 }
 

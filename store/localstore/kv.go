@@ -16,7 +16,6 @@ package localstore
 import (
 	"bytes"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/juju/errors"
@@ -37,7 +36,7 @@ type dbStore struct {
 	db engine.DB
 
 	txns       map[int64]*dbTxn
-	keysLocked map[string]int64
+	keysLocked map[string]kv.Version
 	uuid       string
 	path       string
 }
@@ -48,11 +47,12 @@ type storeCache struct {
 }
 
 var (
-	globalID int64
-	mc       storeCache
+	globalVersionProvider kv.VersionProvider
+	mc                    storeCache
 )
 
 func init() {
+	globalVersionProvider = &localVersionProvider{}
 	mc.cache = make(map[string]*dbStore)
 }
 
@@ -80,7 +80,7 @@ func (d Driver) Open(schema string) (kv.Storage, error) {
 	log.Info("New store", schema)
 	s := &dbStore{
 		txns:       make(map[int64]*dbTxn),
-		keysLocked: make(map[string]int64),
+		keysLocked: make(map[string]kv.Version),
 		uuid:       uuid.NewV4().String(),
 		path:       schema,
 		db:         db,
@@ -107,12 +107,12 @@ func (s *dbStore) Begin() (kv.Transaction, error) {
 
 	txn := &dbTxn{
 		startTs:      time.Now(),
-		tID:          atomic.AddInt64(&globalID, 1),
+		ver:          globalVersionProvider.GetCurrentVersion(),
 		valid:        true,
 		store:        s,
 		snapshotVals: make(map[string][]byte),
 	}
-	log.Debugf("Begin txn:%d", txn.tID)
+	log.Debugf("Begin txn:%v", txn.ver)
 	txn.UnionStore, err = kv.NewUnionStore(&dbSnapshot{snapshot})
 	if err != nil {
 		return nil, err
@@ -146,7 +146,7 @@ func (s *dbStore) newBatch() engine.Batch {
 
 // Both lock and unlock are used for simulating scenario of percolator papers
 
-func (s *dbStore) tryConditionLockKey(tID int64, key string, snapshotVal []byte) error {
+func (s *dbStore) tryConditionLockKey(ver kv.Version, key string, snapshotVal []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -160,11 +160,11 @@ func (s *dbStore) tryConditionLockKey(tID int64, key string, snapshotVal []byte)
 	}
 
 	if !bytes.Equal(currValue, snapshotVal) {
-		log.Warnf("txn:%d, tryLockKey condition not match for key %s, currValue:%s, snapshotVal:%s", tID, key, currValue, snapshotVal)
+		log.Warnf("txn:%v, tryLockKey condition not match for key %s, currValue:%s, snapshotVal:%s", ver, key, currValue, snapshotVal)
 		return errors.Trace(kv.ErrConditionNotMatch)
 	}
 
-	s.keysLocked[key] = tID
+	s.keysLocked[key] = ver
 
 	return nil
 }

@@ -409,7 +409,7 @@ func (t *Table) RowWithCols(ctx context.Context, h int64, cols []*column.Col) ([
 	v := make([]interface{}, len(t.Cols()))
 	for _, c := range cols {
 		k := t.RecordKey(h, c)
-		data, err := txn.Get([]byte(k))
+		data, err := txn.Get([]byte(k), kv.LatestVersion)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -529,7 +529,7 @@ func (t *Table) IterRecords(ctx context.Context, startKey string, cols []*column
 		return err
 	}
 
-	it, err := txn.Seek([]byte(startKey), nil)
+	it, err := txn.Seek([]byte(startKey), kv.LatestVersion, nil)
 	if err != nil {
 		return err
 	}

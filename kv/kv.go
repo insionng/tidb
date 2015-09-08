@@ -23,17 +23,18 @@ type EncodeFn func(raw interface{}) (interface{}, error)
 // This is not thread safe.
 type Transaction interface {
 	// Get gets the value for key k from KV store.
-	Get(k []byte) ([]byte, error)
+	Get(k []byte, ver Version) ([]byte, error)
 	// Set sets the value for key k as v into KV store.
 	Set(k []byte, v []byte) error
 	// Seek searches for the entry with key k in KV store.
-	Seek(k []byte, fnKeyCmp func(key []byte) bool) (Iterator, error)
+	Seek(k []byte, ver Version, fnKeyCmp func(key []byte) bool) (Iterator, error)
 	// Inc increases the value for key k in KV store by step.
 	Inc(k []byte, step int64) (int64, error)
 	// Deletes removes the entry for key k from KV store.
 	Delete(k []byte) error
-	// Commit commites the transaction operations to KV store.
-	Commit() error
+	// Commit commites the transaction operations to KV store. Returns the
+	// version of this transaction
+	Commit() (Version, error)
 	// Rollback undoes the transaction operations to KV store.
 	Rollback() error
 	// String implements Stringer.String() interface.
@@ -45,9 +46,9 @@ type Transaction interface {
 // Snapshot defines the interface for the snapshot fetched from KV store.
 type Snapshot interface {
 	// Get gets the value for key k from snapshot.
-	Get(k []byte) ([]byte, error)
+	Get(k []byte, ver Version) ([]byte, error)
 	// NewIterator gets a new iterator on the snapshot.
-	NewIterator(param interface{}) Iterator
+	NewIterator(param interface{}, ver Version) Iterator
 	// Release releases the snapshot to store.
 	Release()
 }

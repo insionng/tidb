@@ -97,7 +97,7 @@ func (s *session) FinishTxn(rollback bool) error {
 		return s.txn.Rollback()
 	}
 
-	err := s.txn.Commit()
+	_, err := s.txn.Commit()
 	if err != nil {
 		log.Errorf("txn:%s, %v", s.txn, err)
 	}
@@ -206,7 +206,7 @@ func (s *session) GetTxn(forceNew bool) (kv.Transaction, error) {
 		return s.txn, nil
 	}
 	if forceNew {
-		err = s.txn.Commit()
+		_, err = s.txn.Commit()
 		if err != nil {
 			return nil, err
 		}

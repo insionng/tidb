@@ -93,7 +93,7 @@ func valToStr(c *C, iter kv.Iterator) string {
 func checkSeek(c *C, txn kv.Transaction) {
 	for i := startIndex; i < testCount; i++ {
 		val := encodeInt(i)
-		iter, err := txn.Seek(val, nil)
+		iter, err := txn.Seek(val, kv.LatestVersion, nil)
 		c.Assert(err, IsNil)
 		c.Assert(iter.Key(), Equals, string(val))
 		c.Assert(decodeInt([]byte(valToStr(c, iter))), Equals, i)
@@ -103,7 +103,7 @@ func checkSeek(c *C, txn kv.Transaction) {
 	// Test iterator Next()
 	for i := startIndex; i < testCount-1; i++ {
 		val := encodeInt(i)
-		iter, err := txn.Seek(val, nil)
+		iter, err := txn.Seek(val, kv.LatestVersion, nil)
 		c.Assert(err, IsNil)
 		c.Assert(iter.Key(), Equals, string(val))
 		c.Assert(valToStr(c, iter), Equals, string(val))
@@ -119,7 +119,7 @@ func checkSeek(c *C, txn kv.Transaction) {
 	}
 
 	// Non exist seek test
-	iter, err := txn.Seek(encodeInt(testCount), nil)
+	iter, err := txn.Seek(encodeInt(testCount), kv.LatestVersion, nil)
 	c.Assert(err, IsNil)
 	c.Assert(iter.Valid(), IsFalse)
 	iter.Close()
@@ -128,7 +128,7 @@ func checkSeek(c *C, txn kv.Transaction) {
 func mustNotGet(c *C, txn kv.Transaction) {
 	for i := startIndex; i < testCount; i++ {
 		s := encodeInt(i)
-		_, err := txn.Get(s)
+		_, err := txn.Get(s, kv.LatestVersion)
 		c.Assert(err, NotNil)
 	}
 }
@@ -136,7 +136,7 @@ func mustNotGet(c *C, txn kv.Transaction) {
 func mustGet(c *C, txn kv.Transaction) {
 	for i := startIndex; i < testCount; i++ {
 		s := encodeInt(i)
-		val, err := txn.Get(s)
+		val, err := txn.Get(s, kv.LatestVersion)
 		c.Assert(err, IsNil)
 		c.Assert(string(val), Equals, string(s))
 	}
@@ -151,7 +151,7 @@ func (s *testKVSuite) TestGetSet(c *C) {
 	mustGet(c, txn)
 
 	// Check transaction results
-	err = txn.Commit()
+	_, err = txn.Commit()
 	c.Assert(err, IsNil)
 
 	txn, err = s.s.Begin()
@@ -171,7 +171,7 @@ func (s *testKVSuite) TestSeek(c *C) {
 	checkSeek(c, txn)
 
 	// Check transaction results
-	err = txn.Commit()
+	_, err = txn.Commit()
 	c.Assert(err, IsNil)
 
 	txn, err = s.s.Begin()
@@ -192,7 +192,7 @@ func (s *testKVSuite) TestInc(c *C) {
 	c.Assert(n, Equals, int64(100))
 
 	// Check transaction results
-	err = txn.Commit()
+	_, err = txn.Commit()
 	c.Assert(err, IsNil)
 
 	txn, err = s.s.Begin()
@@ -263,7 +263,7 @@ func (s *testKVSuite) TestDelete2(c *C) {
 	txn, err = s.s.Begin()
 	c.Assert(err, IsNil)
 
-	it, err := txn.Seek([]byte("DATA_test_tbl_department_record__0000000001_0003"), nil)
+	it, err := txn.Seek([]byte("DATA_test_tbl_department_record__0000000001_0003"), kv.LatestVersion, nil)
 	c.Assert(err, IsNil)
 	for it.Valid() {
 		err = txn.Delete([]byte(it.Key()))
@@ -276,7 +276,7 @@ func (s *testKVSuite) TestDelete2(c *C) {
 
 	txn, err = s.s.Begin()
 	c.Assert(err, IsNil)
-	it, _ = txn.Seek([]byte("DATA_test_tbl_department_record__000000000"), nil)
+	it, _ = txn.Seek([]byte("DATA_test_tbl_department_record__000000000"), kv.LatestVersion, nil)
 	c.Assert(it.Valid(), IsFalse)
 	txn.Commit()
 
@@ -299,7 +299,7 @@ func (s *testKVSuite) TestBasicSeek(c *C) {
 	c.Assert(err, IsNil)
 	defer txn.Commit()
 
-	it, err := txn.Seek([]byte("2"), nil)
+	it, err := txn.Seek([]byte("2"), kv.LatestVersion, nil)
 	c.Assert(err, IsNil)
 	c.Assert(it.Valid(), Equals, false)
 	txn.Delete([]byte("1"))
@@ -320,30 +320,30 @@ func (s *testKVSuite) TestBasicTable(c *C) {
 	err = txn.Set([]byte("1"), []byte("1"))
 	c.Assert(err, IsNil)
 
-	it, err := txn.Seek([]byte("0"), nil)
+	it, err := txn.Seek([]byte("0"), kv.LatestVersion, nil)
 	c.Assert(err, IsNil)
 	c.Assert(it.Key(), Equals, "1")
 
 	err = txn.Set([]byte("0"), []byte("0"))
 	c.Assert(err, IsNil)
-	it, err = txn.Seek([]byte("0"), nil)
+	it, err = txn.Seek([]byte("0"), kv.LatestVersion, nil)
 	c.Assert(err, IsNil)
 	c.Assert(it.Key(), Equals, "0")
 	err = txn.Delete([]byte("0"))
 	c.Assert(err, IsNil)
 
 	txn.Delete([]byte("1"))
-	it, err = txn.Seek([]byte("0"), nil)
+	it, err = txn.Seek([]byte("0"), kv.LatestVersion, nil)
 	c.Assert(err, IsNil)
 	c.Assert(it.Key(), Equals, "2")
 
 	err = txn.Delete([]byte("3"))
 	c.Assert(err, IsNil)
-	it, err = txn.Seek([]byte("2"), nil)
+	it, err = txn.Seek([]byte("2"), kv.LatestVersion, nil)
 	c.Assert(err, IsNil)
 	c.Assert(it.Key(), Equals, "2")
 
-	it, err = txn.Seek([]byte("3"), nil)
+	it, err = txn.Seek([]byte("3"), kv.LatestVersion, nil)
 	c.Assert(err, IsNil)
 	c.Assert(it.Key(), Equals, "4")
 	err = txn.Delete([]byte("2"))
@@ -377,7 +377,7 @@ func (s *testKVSuite) TestRollback(c *C) {
 	defer txn.Commit()
 
 	for i := startIndex; i < testCount; i++ {
-		_, err := txn.Get([]byte(strconv.Itoa(i)))
+		_, err := txn.Get([]byte(strconv.Itoa(i)), kv.LatestVersion)
 		c.Assert(err, NotNil)
 	}
 }
@@ -401,13 +401,13 @@ func (s *testKVSuite) TestSeekMin(c *C) {
 		txn.Set([]byte(kv.key), []byte(kv.value))
 	}
 
-	it, err := txn.Seek(nil, nil)
+	it, err := txn.Seek(nil, kv.LatestVersion, nil)
 	for it.Valid() {
 		fmt.Printf("%s, %s\n", it.Key(), it.Value())
 		it, _ = it.Next(nil)
 	}
 
-	it, err = txn.Seek([]byte("DATA_test_main_db_tbl_tbl_test_record__00000000000000000000"), nil)
+	it, err = txn.Seek([]byte("DATA_test_main_db_tbl_tbl_test_record__00000000000000000000"), kv.LatestVersion, nil)
 	c.Assert(err, IsNil)
 	c.Assert(string(it.Key()), Equals, "DATA_test_main_db_tbl_tbl_test_record__00000000000000000001")
 
@@ -431,7 +431,7 @@ func (s *testKVSuite) TestConditionIfNotExist(c *C) {
 			if err != nil {
 				return
 			}
-			err = txn.Commit()
+			_, err = txn.Commit()
 			if err == nil {
 				atomic.AddInt64(&success, 1)
 			}
@@ -445,7 +445,7 @@ func (s *testKVSuite) TestConditionIfNotExist(c *C) {
 	c.Assert(err, IsNil)
 	err = txn.Delete(b)
 	c.Assert(err, IsNil)
-	err = txn.Commit()
+	_, err = txn.Commit()
 	c.Assert(err, IsNil)
 }
 
@@ -459,7 +459,7 @@ func (s *testKVSuite) TestConditionIfEqual(c *C) {
 	txn, err := s.s.Begin()
 	c.Assert(err, IsNil)
 	txn.Set(b, b)
-	err = txn.Commit()
+	_, err = txn.Commit()
 	c.Assert(err, IsNil)
 
 	for i := 0; i < cnt; i++ {
@@ -470,7 +470,7 @@ func (s *testKVSuite) TestConditionIfEqual(c *C) {
 			txn1, err1 := s.s.Begin()
 			c.Assert(err1, IsNil)
 			txn1.Set(b, []byte("newValue"))
-			err1 = txn1.Commit()
+			_, err1 = txn1.Commit()
 			if err1 == nil {
 				atomic.AddInt64(&success, 1)
 			}
@@ -484,7 +484,7 @@ func (s *testKVSuite) TestConditionIfEqual(c *C) {
 	c.Assert(err, IsNil)
 	err = txn.Delete(b)
 	c.Assert(err, IsNil)
-	err = txn.Commit()
+	_, err = txn.Commit()
 	c.Assert(err, IsNil)
 }
 
@@ -493,6 +493,6 @@ func (s *testKVSuite) TestConditionUpdate(c *C) {
 	c.Assert(err, IsNil)
 	txn.Delete([]byte("b"))
 	txn.Inc([]byte("a"), 1)
-	err = txn.Commit()
+	_, err = txn.Commit()
 	c.Assert(err, IsNil)
 }

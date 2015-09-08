@@ -28,7 +28,7 @@ type dbSnapshot struct {
 	engine.Snapshot
 }
 
-func (s *dbSnapshot) Get(k []byte) ([]byte, error) {
+func (s *dbSnapshot) Get(k []byte, ver kv.Version) ([]byte, error) {
 	// engine Snapshot return nil, nil for value not found,
 	// so here we will check nil and return kv.ErrNotExist.
 	v, err := s.Snapshot.Get(k)
@@ -43,7 +43,7 @@ func (s *dbSnapshot) Get(k []byte) ([]byte, error) {
 	return v, nil
 }
 
-func (s *dbSnapshot) NewIterator(param interface{}) kv.Iterator {
+func (s *dbSnapshot) NewIterator(param interface{}, ver kv.Version) kv.Iterator {
 	startKey, ok := param.([]byte)
 	if !ok {
 		log.Errorf("leveldb iterator parameter error, %+v", param)
